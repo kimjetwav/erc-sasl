@@ -1,4 +1,4 @@
-;; erc-sasl.el -- handle SASL PLAIN authentication
+;; erc-sasl.el --- SASL PLAIN ERC authentication -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2012 Joseph Gay
 
@@ -37,44 +37,49 @@
 
 ;;; Code:
 
-(eval-when-compile (require 'cl))
+(eval-when-compile
+  (require 'cl-lib))
+(require 'erc)
 
-(defvar erc-sasl-use-sasl t
-  "Set to nil to disable SASL auth")
+(defcustom erc-sasl-prefer-sasl t
+  "Whether to prefer SASL for ERC logins."
+  :type 'boolean
+  :group 'erc-services)
 
-(defvar erc-sasl-server-regexp-list '()
+(defcustom erc-sasl-server-regexp-list '()
   "List of regexps matching server host names for which sasl
-  should be used")
+  should be used."
+  :type '(repeat regexp)
+  :group 'erc-services)
 
-(defun erc-sasl-use-sasl-p ()
-  "Used internally to decide whether SASL should be used in the
-current session"
-  (and erc-sasl-use-sasl
+(cl-defun erc-sasl-use-sasl-p ()
+  "Used internally to decide whether SASL should be used for the
+current session."
+  (and erc-sasl-prefer-sasl
        (boundp 'erc-session-server)
-       (loop for re in erc-sasl-server-regexp-list
-             thereis (integerp (string-match re erc-session-server)))))
+       (cl-loop for re in erc-sasl-server-regexp-list
+                thereis (integerp (string-match re erc-session-server)))))
 
 (define-erc-response-handler (CAP)
   "Client capability framework is used to request SASL auth, need
   to wait for ACK to begin" nil
   (let ((msg (erc-response.contents parsed)))
     (when (string-match " *sasl" msg)
-      (erc-server-send "AUTHENTICATE PLAIN")
       ;; now wait for AUTHENTICATE +
-      )))
+      (erc-server-send "AUTHENTICATE PLAIN"))))
 
 (define-erc-response-handler (AUTHENTICATE)
   "Handling empty server response indicating ready to receive
   authentication." nil
   (if erc-session-password
       (let ((msg (erc-response.contents parsed)))
-        (when (string= "+" msg)
-          ;; plain auth
+        (when (string= "+" msg) ;; plain auth
           (erc-server-send
            (format "AUTHENTICATE %s"
                    (base64-encode-string
                     (concat "\0" (erc-current-nick)
-                            "\0" erc-session-password) t)))))
+                            "\0" erc-session-password)
+                    t)))))
     (progn
       (erc-display-message
        parsed 'error
